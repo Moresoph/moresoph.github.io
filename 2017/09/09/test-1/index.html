@@ -94,14 +94,17 @@
 
 
 
+<meta name="description" content="自旋锁与互斥锁深入探究自旋锁与互斥锁的特点： 自旋锁a. 在获取锁之前一直忙等待，直到获取锁。b. 适用与单处理器抢占内核或多处理器情况下。(对于单处理器非抢占内核会被编译器自动忽略) 互斥锁在获取锁前如果阻塞，当前线程挂起，直到能获取锁。  本文要解答的几个问题：    自旋锁与互斥锁的联系区别各是什么？它们各自适合哪种应用场景？有哪些注意事项？  为什么在自旋锁保护的临界区中，线程不能休眠挂起">
 <meta property="og:type" content="article">
-<meta property="og:title" content="test">
+<meta property="og:title" content="自旋锁与互斥锁深入探究">
 <meta property="og:url" content="http://yoursite.com/2017/09/09/test-1/index.html">
 <meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="自旋锁与互斥锁深入探究自旋锁与互斥锁的特点： 自旋锁a. 在获取锁之前一直忙等待，直到获取锁。b. 适用与单处理器抢占内核或多处理器情况下。(对于单处理器非抢占内核会被编译器自动忽略) 互斥锁在获取锁前如果阻塞，当前线程挂起，直到能获取锁。  本文要解答的几个问题：    自旋锁与互斥锁的联系区别各是什么？它们各自适合哪种应用场景？有哪些注意事项？  为什么在自旋锁保护的临界区中，线程不能休眠挂起">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2017-09-09T12:33:22.307Z">
+<meta property="og:updated_time" content="2017-09-09T12:50:22.295Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="test">
+<meta name="twitter:title" content="自旋锁与互斥锁深入探究">
+<meta name="twitter:description" content="自旋锁与互斥锁深入探究自旋锁与互斥锁的特点： 自旋锁a. 在获取锁之前一直忙等待，直到获取锁。b. 适用与单处理器抢占内核或多处理器情况下。(对于单处理器非抢占内核会被编译器自动忽略) 互斥锁在获取锁前如果阻塞，当前线程挂起，直到能获取锁。  本文要解答的几个问题：    自旋锁与互斥锁的联系区别各是什么？它们各自适合哪种应用场景？有哪些注意事项？  为什么在自旋锁保护的临界区中，线程不能休眠挂起">
 
 
 
@@ -136,7 +139,7 @@
 
 
 
-  <title>test | Hexo</title>
+  <title>自旋锁与互斥锁深入探究 | Hexo</title>
   
 
 
@@ -280,7 +283,7 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">test</h1>
+          <h1 class="post-title" itemprop="name headline">自旋锁与互斥锁深入探究</h1>
         
 
         <div class="post-meta">
@@ -330,7 +333,215 @@
       
 
       
-        
+        <h1 id="自旋锁与互斥锁深入探究"><a href="#自旋锁与互斥锁深入探究" class="headerlink" title="自旋锁与互斥锁深入探究"></a>自旋锁与互斥锁深入探究</h1><h4 id="自旋锁与互斥锁的特点："><a href="#自旋锁与互斥锁的特点：" class="headerlink" title="自旋锁与互斥锁的特点："></a>自旋锁与互斥锁的特点：</h4><ul>
+<li>自旋锁<br>a. 在获取锁之前一直忙等待，直到获取锁。<br>b. 适用与单处理器抢占内核或多处理器情况下。(对于单处理器非抢占内核会被编译器自动忽略)</li>
+<li>互斥锁<br>在获取锁前如果阻塞，当前线程挂起，直到能获取锁。</li>
+</ul>
+<p><strong>本文要解答的几个问题</strong>：  </p>
+<ol>
+<li><p>自旋锁与互斥锁的联系区别各是什么？它们各自适合哪种应用场景？有哪些注意事项？</p>
+</li>
+<li><p>为什么在自旋锁保护的临界区中，线程不能休眠挂起。如果出现此种情况，为什么可能会导致死锁的发生？</p>
+</li>
+<li><p>为什么说在单处理器非抢占内核情况下，自旋锁会被忽略。</p>
+</li>
+<li><p>互斥锁一旦阻塞则会导致当前线程挂起，那么一旦能获取此锁时，操作系统是通过什么机制来通知被锁阻塞挂起的线程此锁可用的呢？  </p>
+</li>
+</ol>
+<p>为了解答这些问题，先从自旋锁进行分析。   </p>
+<h4 id="自旋锁的设计目的"><a href="#自旋锁的设计目的" class="headerlink" title="自旋锁的设计目的:"></a>自旋锁的设计目的:</h4><p>锁有两种模式:</p>
+<ol>
+<li>sleep-wait</li>
+<li>spin-wait  </li>
+</ol>
+<p>这两种模式都会导致性能损耗，sleep-wait的性能损耗主要在线程或进程的切换上(比如，寄存器上下文、堆栈、CPU的cache、MMU tlb等切换的开销)。而spin-wait的开销主要在空等待上。<br>有了上面的概念，为什么操作系统要引入自旋锁就很明白了，及在某些情况下，spin-wait的开销要比sleep-wati的小，性能要更好。</p>
+<p>有些文章说自旋锁的设计目的如下：</p>
+<blockquote>
+<p>自旋锁最初的设计目的是为了SMP系统所设计的，实现在多处理器情况下保护临界区。<br>自旋锁常用于保护一段短小的临界区操作代码，保证此临界区的操作是原子的，从而避免对此临界区的竞争与冒险。 </p>
+</blockquote>
+<p>我觉得上面的说法是有问题的，<strong>这种说法有点颠倒了因果，没有把问题说透</strong>，解释如下:<br>第一：锁的目的，本来就是为了保护临界区，sleep-wait模式的锁也可以在多处理器的情况下对临界区进行保护。  </p>
+<p>第二：自旋锁的设计目的仅仅是为了空等待不陷入休眠，只要空等待的所需的时间小于休眠而线程切换的时间，那么效率就提高了，目的就达到了。正是自旋锁的这种特性，导致了它适合用来保护一段短小的临界区（如果这段临界区的执行时间，小于线程切换消耗的时间，就达到了自旋锁本来的目的）。</p>
+<p>对自旋锁的设计进行目的进行一个总结，及某些情况下，sleep-wait由于要进行各种上下文的切换而导致的开销太大，因此引入了spin-wait的循环等待模式，在此这些情况下开销会更小，因此引入了自旋锁。</p>
+<h4 id="为了达到上面的目的，自旋锁做了哪些工作"><a href="#为了达到上面的目的，自旋锁做了哪些工作" class="headerlink" title="为了达到上面的目的，自旋锁做了哪些工作"></a>为了达到上面的目的，自旋锁做了哪些工作</h4><p>为了达到循环等待，而不进行上下文切换，自旋锁需要做下面的工作：</p>
+<ol>
+<li>避免中断(仅在中断代码需要访问临界区时需要)<br>这一点需要解释下，spin-lock分为两种，一种是关中断的，一种是不关中断的。对于不关中断的，要求在中断处理函数中，避免对spin-lock的访问，否则可能导致死锁。  </li>
+<li>禁止内核抢占<br>如果在自旋锁的空循环中，当前线程被抢占了，则自旋锁的设计意义就没了（要是还能抢占，还不如直接用sleep-wait锁）。</li>
+<li>需要在内存中设置某一标志，来标志自旋锁是否已被占用<br>这一点很好理解，凡是锁都这样，这种标志的实现也必须保证原子性和效率（涉及到了CPU底层的硬件支持了，不是本文的重点，不进行深入）。</li>
+</ol>
+<h4 id="自旋锁的具体实现"><a href="#自旋锁的具体实现" class="headerlink" title="自旋锁的具体实现"></a>自旋锁的具体实现</h4><p>下面从一个自旋锁lock函数的具体实现，来进行分析：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div></pre></td><td class="code"><pre><div class="line">    //上锁操作</div><div class="line">    static  inline void spin_lock(spinlock_t *lock)</div><div class="line">    &#123;</div><div class="line">        preempt_disable();           //禁止抢占</div><div class="line">        raw_spin_lock(&amp;lock-&gt;slock);</div><div class="line">    &#125;</div><div class="line">    //raw_spin_lock的底层汇编实现</div><div class="line">    raw_spin_lock:</div><div class="line">        mov  r1,#1                   //1--&gt;r1</div><div class="line">        DSB</div><div class="line">        take_again:</div><div class="line">        LDREX     r2,[r0]            //把r0的内容赋给r2,同时置全局标志exclusive，</div><div class="line">                                       设置r0所指向的物理地址为当前处理器独占</div><div class="line">        STREX     r3,r1,[r0]         //首先检查，此物理地址是否已经被独自</div><div class="line">                                       已经独占：将r1寄存器的值更新到r0所指向的内存中</div><div class="line">                                       未独占  ：将r3寄存器的值设置为1，不更新r0所指向的内存</div><div class="line">        TEQ         r3,#0            //测试r3寄存器中的值</div><div class="line">        BNE       take_again</div><div class="line">        TEQ        r2,#0             //测试r2寄存器中的值</div><div class="line">        BNE       take_again</div><div class="line">        MOV       pc,lr              //返回</div><div class="line">```  </div><div class="line"></div><div class="line">从上锁操作的代码可以看出，在自旋锁的底层实现使用了LDREX和STREX，这两个指令需要CPU底层的支持，来控制多核情况下对内存的访问。</div><div class="line">如果需要，关闭中断，可加入local_irq_save和local_irq_restore等中断控制的代码即可。</div><div class="line"></div><div class="line"></div><div class="line">#### 互斥锁的实现</div><div class="line">互斥锁其实是一种sleep-wait锁，这种锁大家都比较熟悉，先对互斥锁的加解锁过程给出如下结论：</div><div class="line">1.  加锁过程</div><div class="line">    如果能获取锁，则直接获取，否则将任务挂在锁的任务队列里面，调用schedule(); 进行内核调度。</div><div class="line">    这里需要注意的一点是，从schedule()函数中返回后的第一条语句是执行spin_lock_mutex(&amp;lock-&gt;wait_lock, flags); </div><div class="line">    及加自旋锁然后再check锁的状态。</div><div class="line">2.  解锁过程</div><div class="line">    解锁后，会看等待队列是否为空了，如果不为空，则将等待队列上的首任务线程唤醒。为空，不做处理。</div><div class="line"></div><div class="line">然后分析源码，来验证上面的结论，加解锁源码如下所示:</div></pre></td></tr></table></figure></p>
+<pre><code>//互斥锁的数据结构
+struct mutex {  
+//引用计数器  
+//1: 锁可以利用。   
+//小于等于0：该锁已被获取，需要等待  
+atomic_t  count;  
+
+//自旋锁类型，保证多cpu下，对等待队列访问是安全的。*
+//UPN(第三版 P355)上讲自旋锁通常作为底层原语来实现其他类型的锁
+spinlock_t  wait_lock;  
+
+//等待队列，如果该锁被获取，任务将挂在此队列上，等待调度。  
+struct list_head wait_list;  
+};  
+
+//加锁部分
+//加锁函数入口
+#define __mutex_fastpath_lock(count, fail_fn)   /  
+do {        /  
+    unsigned int dummy;     /  
+    //检查参数类型的有效性  
+    typecheck(atomic_t *, count);    /  
+    typecheck_fn(void (*)(atomic_t *), fail_fn);  /  
+
+    //输入，输出寄存器为eax,输入为count,输出为dummy,仅将eax的值减1  
+    //LOC_PREFIX是一个指令前缀，引用Intel官方文档上的解释，其实是独占使用内存
+        the LOCK# signal insures that the processor has exclusive 
+        use of any shared memory while the signal is asserted.
+    asm volatile(LOCK_PREFIX &quot;   decl (%%eax)/n&quot;  /  
+    &quot;   jns 1f /n&quot;    /  
+    如果减后为负数，调用回调函数，尝试阻塞该进程  
+    &quot;   call &quot; #fail_fn &quot;/n&quot;   /  
+    &quot;1:/n&quot;     /  
+    : &quot;=a&quot; (dummy)    /  
+    : &quot;a&quot; (count)    /  
+    : &quot;memory&quot;, &quot;ecx&quot;, &quot;edx&quot;);   /  
+} while (0)  
+
+//回调函数
+static noinline int __sched __mutex_lock_killable_slowpath(atomic_t *lock_count)  
+{  
+    //通过结构的成员地址，获取该结构地址  
+    struct mutex *lock = container_of(lock_count, struct mutex, count);  
+    //该函数在后面做详细介绍  
+    return __mutex_lock_common(lock, TASK_KILLABLE, 0, _RET_IP_);  
+} 
+
+//真正获取锁的地方
+static inline int __sched  
+__mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,  
+     unsigned long ip)  
+{  
+    //获取当前进程的task_struct的地址  
+    struct task_struct *task = current;  
+    struct mutex_waiter waiter;  
+    unsigned int old_val;  
+    unsigned long flags;  
+    //对该锁上的等待队列加自旋锁，防止多个CPU的情况。  
+    spin_lock_mutex(&amp;lock-&gt;wait_lock, flags);  
+    //将该任务添加到该锁的等待队列上  
+    list_add_tail(&amp;waiter.list, &amp;lock-&gt;wait_list);  
+    waiter.task = task;  
+
+    //用一条汇编指令对count进行付值，lock-&gt;count=-1,保证该操作在一个cpu上是原子的  
+    old_val = atomic_xchg(&amp;lock-&gt;count, -1);  
+    //如果lock-&gt;count之前的值为1，说明是可以获取锁的  
+    if (old_val == 1)  
+        goto done;  
+        lock_contended(&amp;lock-&gt;dep_map, ip);  
+    for (;;) {  
+        //在这个地方，又尝试去获取锁，处理方式如上。  
+        old_val = atomic_xchg(&amp;lock-&gt;count, -1);  
+        if (old_val == 1)  
+            break;  
+        //如果该进程是可中断的，或者该进程是可kiilable的，如果有信号  
+        //被递送到该任务，那么该进程将从等待队列中移除  
+        if (unlikely((state == TASK_INTERRUPTIBLE &amp;&amp;  
+            signal_pending(task)) ||  
+            (state == TASK_KILLABLE &amp;&amp;  
+            fatal_signal_pending(task)))) {  
+            mutex_remove_waiter(lock, &amp;waiter,  
+            task_thread_info(task));  
+            mutex_release(&amp;lock-&gt;dep_map, 1, ip);  
+            spin_unlock_mutex(&amp;lock-&gt;wait_lock, flags);  
+            debug_mutex_free_waiter(&amp;waiter);  
+            //返回被信号中断  
+            return -EINTR;  
+        }  
+    __set_task_state(task, state);  
+    //如果还不能获取所，则将自旋锁解除，当从schedule返回时再次获取自旋锁，  
+    //重复如上操作。  
+    spin_unlock_mutex(&amp;lock-&gt;wait_lock, flags);  
+    schedule();  
+    spin_lock_mutex(&amp;lock-&gt;wait_lock, flags);  
+}  
+//表示已经获取了锁  
+done:  
+    lock_acquired(&amp;lock-&gt;dep_map);  
+    //将该任务从等待队列中删除  
+    mutex_remove_waiter(lock, &amp;waiter, task_thread_info(task));  
+    debug_mutex_set_owner(lock, task_thread_info(task));  
+    //如果等待队列为空将lock-&gt;count置为0  
+    if (likely(list_empty(&amp;lock-&gt;wait_list))) 
+        atomic_set(&amp;lock-&gt;count, 0);  
+    spin_unlock_mutex(&amp;lock-&gt;wait_lock, flags);  
+    debug_mutex_free_waiter(&amp;waiter);  
+    return 0;  
+</code></pre><p>}  </p>
+<pre><code>//解锁过程
+//解锁入口
+void __sched mutex_unlock(struct mutex *lock)  
+{  
+    解锁后lock-&gt;count将从0变为1  
+    __mutex_fastpath_unlock(&amp;lock-&gt;count, __mutex_unlock_slowpath);  
+}  
+
+#define __mutex_fastpath_unlock(count, fail_fn)   /  
+do {        /  
+    unsigned int dummy;     /  
+    /  
+    typecheck(atomic_t *, count);    /  
+    typecheck_fn(void (*)(atomic_t *), fail_fn);  /  
+    /  
+    asm volatile(LOCK_PREFIX &quot;   incl (%%eax)/n&quot;  /  
+    &quot;   jg 1f/n&quot;    /  
+    &quot;   call &quot; #fail_fn &quot;/n&quot;   /  
+    &quot;1:/n&quot;     /  
+    : &quot;=a&quot; (dummy)    /  
+    : &quot;a&quot; (count)    /  
+    : &quot;memory&quot;, &quot;ecx&quot;, &quot;edx&quot;);   /  
+} while (0)  
+
+static noinline void  
+__mutex_unlock_slowpath(atomic_t *lock_count)  
+{  
+    __mutex_unlock_common_slowpath(lock_count, 1);  
+}  
+static inline void  
+__mutex_unlock_common_slowpath(atomic_t *lock_count, int nested)  
+{  
+    //通过结构的成员地址，获取该结构地址  
+    struct mutex *lock = container_of(lock_count, struct mutex, count);  
+    unsigned long flags;  
+    //为等待队列加自旋锁  
+    spin_lock_mutex(&amp;lock-&gt;wait_lock, flags);  
+    mutex_release(&amp;lock-&gt;dep_map, nested, _RET_IP_);  
+    debug_mutex_unlock(lock);  
+    if (__mutex_slowpath_needs_to_unlock())  
+    atomic_set(&amp;lock-&gt;count, 1);  
+    //先看看等待队列是不是为空了，如果已经为空，不需要做任何处理，否则  
+    //将该等待队列上面的队首进程唤醒  
+    if (!list_empty(&amp;lock-&gt;wait_list)) {  
+    struct mutex_waiter *waiter =  
+    list_entry(lock-&gt;wait_list.next,  
+    struct mutex_waiter, list);  
+    debug_mutex_wake_waiter(lock, waiter);  
+    wake_up_process(waiter-&gt;task);  
+    }  
+    debug_mutex_clear_owner(lock);  
+    spin_unlock_mutex(&amp;lock-&gt;wait_lock, flags);  
+}  
+</code></pre><p>```</p>
+<h4 id="最后，解答文章开头所提的问题"><a href="#最后，解答文章开头所提的问题" class="headerlink" title="最后，解答文章开头所提的问题:"></a>最后，解答文章开头所提的问题:</h4><p>第一个问题：<br>    自旋锁与互斥锁的联系是，在互斥锁的底层，其实引入了自旋锁，也就是说互斥锁是靠自旋锁来实现的。不光是互斥锁，很多内核底层的数据结构，都引入了自旋锁。<br>    两种锁的区别是，在不能成功获取锁时，自旋锁循环等待来直到获取锁，这期间可能禁止中断(对于中断，仅仅是可能)，并且禁用内核抢占(这个是一定的)，来防止其他<br>    线程获取CPU。而互斥锁在获取锁失败后，调用调度函数，放弃CPU，直到当前线程再次被调度，或其他线程解锁时来唤醒，锁上挂载的任务队列。  </p>
+<p>第二个问题：<br>    如果自旋锁保护的临界区中，出现了休眠，此时如果其他线程尝试获取锁，则由于中断被禁止、内核抢占被禁止，那么可能导致被休眠的线程一直得不到调度，而尝试获取锁<br>    的线程会一直死循环直到能获取锁。  </p>
+<p>第三个问题：<br>    单处理器非抢占内核，自旋锁会被忽略。自旋锁要干的事，已经被干了，所以被忽略了。  </p>
+<p>第四个问题:<br>    某线程被互斥锁阻塞后，此线程会被挂载到互斥锁的等待链表中，当锁被释放会尝试唤醒，其等待链表上的任务。</p>
+<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><ol>
+<li><a href="http://blog.chinaunix.net/uid-26990992-id-3264808.html" target="_blank" rel="external">http://blog.chinaunix.net/uid-26990992-id-3264808.html</a></li>
+<li><a href="http://blog.chinaunix.net/uid-20269725-id-2990011.html" target="_blank" rel="external">http://blog.chinaunix.net/uid-20269725-id-2990011.html</a></li>
+<li><a href="http://dog250.blog.51cto.com/2466061/1675506" target="_blank" rel="external">http://dog250.blog.51cto.com/2466061/1675506</a></li>
+<li><a href="http://blog.csdn.net/lixiaojie1012/article/details/24272757" target="_blank" rel="external">http://blog.csdn.net/lixiaojie1012/article/details/24272757</a></li>
+</ol>
+
       
     </div>
     
@@ -414,8 +625,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview sidebar-panel sidebar-panel-active">
+      <section class="site-overview sidebar-panel">
         <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
           <img class="site-author-image" itemprop="image"
                src="/images/headPortrait.jpg"
@@ -459,6 +679,22 @@
 
       </section>
 
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#自旋锁与互斥锁深入探究"><span class="nav-number">1.</span> <span class="nav-text">自旋锁与互斥锁深入探究</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#自旋锁与互斥锁的特点："><span class="nav-number">1.0.0.1.</span> <span class="nav-text">自旋锁与互斥锁的特点：</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#自旋锁的设计目的"><span class="nav-number">1.0.0.2.</span> <span class="nav-text">自旋锁的设计目的:</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#为了达到上面的目的，自旋锁做了哪些工作"><span class="nav-number">1.0.0.3.</span> <span class="nav-text">为了达到上面的目的，自旋锁做了哪些工作</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#自旋锁的具体实现"><span class="nav-number">1.0.0.4.</span> <span class="nav-text">自旋锁的具体实现</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#最后，解答文章开头所提的问题"><span class="nav-number">1.0.0.5.</span> <span class="nav-text">最后，解答文章开头所提的问题:</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#参考资料"><span class="nav-number">1.1.</span> <span class="nav-text">参考资料</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
       
 
       
