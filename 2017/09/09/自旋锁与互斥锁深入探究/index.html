@@ -78,7 +78,7 @@
 <link href="/css/main.css?v=5.1.2" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="Hexo, NexT" />
+  <meta name="keywords" content="OperatingSystem,Linux," />
 
 
 
@@ -95,13 +95,14 @@
 
 
 <meta name="description" content="自旋锁与互斥锁深入探究自旋锁与互斥锁的特点： 自旋锁a. 在获取锁之前一直忙等待，直到获取锁。b. 适用与单处理器抢占内核或多处理器情况下。(对于单处理器非抢占内核会被编译器自动忽略) 互斥锁在获取锁前如果阻塞，当前线程挂起，直到能获取锁。  本文要解答的几个问题：    自旋锁与互斥锁的联系区别各是什么？它们各自适合哪种应用场景？有哪些注意事项？  为什么在自旋锁保护的临界区中，线程不能休眠挂起">
+<meta name="keywords" content="OperatingSystem,Linux">
 <meta property="og:type" content="article">
 <meta property="og:title" content="自旋锁与互斥锁深入探究">
 <meta property="og:url" content="http://yoursite.com/2017/09/09/自旋锁与互斥锁深入探究/index.html">
 <meta property="og:site_name" content="Hexo">
 <meta property="og:description" content="自旋锁与互斥锁深入探究自旋锁与互斥锁的特点： 自旋锁a. 在获取锁之前一直忙等待，直到获取锁。b. 适用与单处理器抢占内核或多处理器情况下。(对于单处理器非抢占内核会被编译器自动忽略) 互斥锁在获取锁前如果阻塞，当前线程挂起，直到能获取锁。  本文要解答的几个问题：    自旋锁与互斥锁的联系区别各是什么？它们各自适合哪种应用场景？有哪些注意事项？  为什么在自旋锁保护的临界区中，线程不能休眠挂起">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2017-09-10T08:58:35.267Z">
+<meta property="og:updated_time" content="2017-09-10T09:45:07.684Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="自旋锁与互斥锁深入探究">
 <meta name="twitter:description" content="自旋锁与互斥锁深入探究自旋锁与互斥锁的特点： 自旋锁a. 在获取锁之前一直忙等待，直到获取锁。b. 适用与单处理器抢占内核或多处理器情况下。(对于单处理器非抢占内核会被编译器自动忽略) 互斥锁在获取锁前如果阻塞，当前线程挂起，直到能获取锁。  本文要解答的几个问题：    自旋锁与互斥锁的联系区别各是什么？它们各自适合哪种应用场景？有哪些注意事项？  为什么在自旋锁保护的临界区中，线程不能休眠挂起">
@@ -403,6 +404,14 @@
 
     <footer class="post-footer">
       
+        <div class="post-tags">
+          
+            <a href="/tags/OperatingSystem/" rel="tag"># OperatingSystem</a>
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+        </div>
+      
 
       
       
@@ -505,6 +514,15 @@
 
           
 
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">2</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
           
 
         </nav>
